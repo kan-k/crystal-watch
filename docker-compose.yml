@@ -1,0 +1,13 @@
+services:
+  crystal-watch:
+    build: .
+    container_name: crystal-watch
+    env_file: .env
+    environment:
+      - STATE_FILE=/app/data/state.json
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
