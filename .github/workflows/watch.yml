@@ -14,6 +14,11 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      test_alert:
+        description: "Send a test message to the alert channels first"
+        type: boolean
+        default: false
 
 concurrency:
   group: crystal-watch
@@ -36,6 +41,15 @@ jobs:
           python-version: "3.12"
 
       - run: pip install -q -r requirements.txt
+
+      - name: Send test alert
+        if: ${{ github.event.inputs.test_alert == 'true' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_TO }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python watcher.py --test-alert
 
       - name: Poll the booking site
         env:
