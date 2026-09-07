@@ -1,0 +1,68 @@
+# Runs the watcher on GitHub-hosted runners.
+#
+# How it behaves: GitHub fires this every 5 minutes (its minimum, often delayed a few
+# minutes under load). Each run polls continuously for ~4 minutes (several full sweeps),
+# then commits state.json back so the next run knows what it has already alerted on.
+# Net effect: near-continuous coverage with occasional gaps of a few minutes.
+#
+# Setup: Settings -> Secrets and variables -> Actions -> New repository secret
+#   DISCORD_WEBHOOK_URL   and/or   LINE_CHANNEL_ACCESS_TOKEN + LINE_TO
+# Settings -> Actions -> General -> Workflow permissions -> "Read and write" (to commit state)
+name: crystal-watch
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: crystal-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -q -r requirements.txt
+
+      - name: Poll the booking site
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_TO }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          STATE_FILE: state.json
+          MAX_RUNTIME_SEC: "240"
+          REQUEST_GAP_SEC: "1.5"
+          SWEEP_GAP_SEC: "3"
+          ALERT_ON_STARTUP: "1"
+          FAIL_ALERT_AFTER_MIN: "3"
+          TZ_NAME: Asia/Bangkok
+        run: python watcher.py
+
+      - name: Save state for the next run
+        if: always()
+        run: |
+          git config user.name "crystal-watch[bot]"
+          git config user.email "crystal-watch@users.noreply.github.com"
+          git add state.json
+          if git diff --cached --quiet; then echo "state unchanged"; exit 0; fi
+          git commit -q -m "state: $(date -u +'%Y-%m-%dT%H:%MZ') [skip ci]"
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            git pull --rebase -X theirs -q || true
+            sleep $((i * 3))
+          done
+          echo "::warning::could not push state after retries"
