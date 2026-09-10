@@ -64,6 +64,9 @@ jobs:
           ALERT_ON_STARTUP: "1"
           FAIL_ALERT_AFTER_MIN: "3"
           TZ_NAME: Asia/Bangkok
+          # only alert for slots starting 09:00-21:00 (ignore 06-09 and 22-24)
+          FILTER_TIME_FROM: "09:00"
+          FILTER_TIME_TO: "22:00"
         run: python watcher.py
 
       - name: Save state for the next run
